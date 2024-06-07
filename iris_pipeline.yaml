@@ -1,0 +1,292 @@
+# PIPELINE DEFINITION
+# Name: iris-pipeline
+# Description: Pipeline to prepare Iris dataset.
+components:
+  comp-get-metrics:
+    executorLabel: exec-get-metrics
+  comp-predict-prob-on-test-data:
+    executorLabel: exec-predict-prob-on-test-data
+  comp-prepare-data:
+    executorLabel: exec-prepare-data
+  comp-test-on-data:
+    executorLabel: exec-test-on-data
+  comp-train-basic-classifier:
+    executorLabel: exec-train-basic-classifier
+  comp-train-test-split:
+    executorLabel: exec-train-test-split
+deploymentSpec:
+  executors:
+    exec-get-metrics:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - get_metrics
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ 'sklearn' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef get_metrics():\n    import subprocess\n    subprocess.run(['pip',\
+          \ 'install', 'pandas','numpy', 'scikit-learn'])\n    import pandas as pd\n\
+          \    import numpy as np\n    from sklearn.metrics import accuracy_score\
+          \ , precision_score,recall_score,log_loss\n    from sklearn import metrics\n\
+          \    y_test = np.load(f'data/y_test.npy',allow_pickle=True)\n    y_pred\
+          \ = np.load(f'data/y_pred.npy',allow_pickle=True)\n    y_pred_proba = np.load(f'data/y_pred_proba.npy',allow_pickle=True)\n\
+          \n    acc_score = accuracy_score(y_test,y_pred)\n\n    pre_score = precision_score(y_test,y_pred)\n\
+          \    recall_score = recall_score(y_test,y_pred)\n    log = log_loss(y_test,y_pred_proba)\n\
+          \    print(\"\\n Model Metrics:\", {'accuracy': round(acc_score, 2), 'precision':\
+          \ round(pre_score, 2), 'recall': round(recall_score, 2), 'entropy': round(log,\
+          \ 2)})\n\n"
+        image: python:3.12
+    exec-predict-prob-on-test-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - predict_prob_on_test_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ 'sklearn' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef predict_prob_on_test_data():\n    import pandas as pd\n    import\
+          \ numpy as np\n    import pickle\n    print(\"---- Inside predict_prob_on_test_data\
+          \ component ----\")\n    with open(f'data/model.pkl','rb') as f:\n     \
+          \   logistic_reg_model = pickle.load(f)\n    X_test = np.load(f'data/X_test.npy',allow_pickle=True)\n\
+          \    y_pred_prob = logistic_reg_model.predict_proba(X_test)\n    np.save(f'data/y_pred_prob.npy',\
+          \ y_pred_prob)\n\n    print(\"\\n---- Predicted Probabilities ----\")\n\
+          \    print(\"\\n\")\n    print(y_pred_prob)\n\n"
+        image: python:3.12
+    exec-prepare-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - prepare_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' &&\
+          \ \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef prepare_data():\n\n    import pandas as pd\n    print(\"-------Inside\
+          \ data -----------\")\n    df = pd.read_csv(\"\")\n    df = df.dropna()\n\
+          \    df.to_csv(f'data/final_data.csv',index = False)\n    print(\"-----\
+          \ data saved in csv format --------\")\n\n"
+        image: python:3.12
+    exec-test-on-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - test_on_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ 'sklearn' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef test_on_data():\n    import pandas as pd\n    import numpy as\
+          \ np\n    import pickle\n    with open(f'data/model.pkl','rb') as f:\n \
+          \       l_model = pickle.load(f)\n    X_test = np.load(f'data/X_test.npy',allow_pickle=True)\n\
+          \    y_pred = l_model.predict(X_test)\n\n\n    np.save(f'data/y_pred.npy',y_pred)\n\
+          \n    print(\"-------Prediction Completed---------\")\n    print(y_pred)\n\
+          \n"
+        image: python:3.12
+    exec-train-basic-classifier:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_basic_classifier
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ 'sklearn' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_basic_classifier():\n    import pandas as pd\n    import\
+          \ numpy as np\n    from sklearn.linear_model import LogisticRegression\n\
+          \    X_train = np.load(f'data/X_train.npy',allow_pickle=True)\n    y_train\
+          \ = np.load(f'data/y_train.npy',allow_pickle=True)\n    classifier = LogiticRegression(max_iter\
+          \ = 500)\n    classifier.fit(X_train,y_train)\n    import pickle\n    with\
+          \ open(f'data/model.pkl','wb') as f:\n        pickle.dump(classifier,f)\n\
+          \    print(\"-----------LOGISTIC REGRESSION TRAINED--------\")\n\n"
+        image: python:3.12
+    exec-train-test-split:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_test_split
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_test_split():\n\n    import pandas as pd\n    import numpy\
+          \ as np\n    from sklearn.model_selection import train_test_split\n    print(\"\
+          ------seperating data into test train -----\")\n    final_data = pd.read_csv(f'data/final_data.csv')\n\
+          \    target_column = 'class'\n    X = final_data.loc[:,final_data.columns\
+          \ != target_column]\n    y = final_data.loc[:,final_data.columns==target_column]\n\
+          \    X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.3,stratify\
+          \ = y,random_state = 47)\n    np.save(f'data/X_train.npy',X_train)\n   \
+          \ np.save(f'data/X_test.npy',X_test)\n    np.save(f'data/y_train.npy',y_train)\n\
+          \    np.save(f'data/y_test.npy',y_test)\n\n    print(\"--------training\
+          \ data -----------\")\n    print(\"/n\")\n    print(X_train)\n\n    print(\"\
+          --------test data -------\")\n    print(\"/n\")\n    print(X_test)\n\n"
+        image: python:3.12
+pipelineInfo:
+  description: Pipeline to prepare Iris dataset.
+  name: iris-pipeline
+root:
+  dag:
+    tasks:
+      get-metrics:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-get-metrics
+        dependentTasks:
+        - predict-prob-on-test-data
+        taskInfo:
+          name: get-metrics
+      predict-prob-on-test-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-predict-prob-on-test-data
+        dependentTasks:
+        - test-on-data
+        taskInfo:
+          name: predict-prob-on-test-data
+      prepare-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-prepare-data
+        taskInfo:
+          name: prepare-data
+      test-on-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-test-on-data
+        dependentTasks:
+        - train-basic-classifier
+        taskInfo:
+          name: test-on-data
+      train-basic-classifier:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-basic-classifier
+        dependentTasks:
+        - train-test-split
+        taskInfo:
+          name: train-basic-classifier
+      train-test-split:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-test-split
+        dependentTasks:
+        - prepare-data
+        taskInfo:
+          name: train-test-split
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.7.0

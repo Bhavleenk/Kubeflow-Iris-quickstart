@@ -1,7 +1,70 @@
 # PIPELINE DEFINITION
 # Name: iris-pipeline
 # Description: Pipeline to prepare Iris dataset.
+# Inputs:
+#    data_path: str
 components:
+  comp-createpvc:
+    executorLabel: exec-createpvc
+    inputDefinitions:
+      parameters:
+        access_modes:
+          description: 'AccessModes to request for the provisioned PVC. May
+
+            be one or more of ``''ReadWriteOnce''``, ``''ReadOnlyMany''``, ``''ReadWriteMany''``,
+            or
+
+            ``''ReadWriteOncePod''``. Corresponds to `PersistentVolumeClaim.spec.accessModes
+            <https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes>`_.'
+          parameterType: LIST
+        annotations:
+          description: Annotations for the PVC's metadata. Corresponds to `PersistentVolumeClaim.metadata.annotations
+            <https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaim>`_.
+          isOptional: true
+          parameterType: STRUCT
+        pvc_name:
+          description: 'Name of the PVC. Corresponds to `PersistentVolumeClaim.metadata.name
+            <https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaim>`_.
+            Only one of ``pvc_name`` and ``pvc_name_suffix`` can
+
+            be provided.'
+          isOptional: true
+          parameterType: STRING
+        pvc_name_suffix:
+          description: 'Prefix to use for a dynamically generated name, which
+
+            will take the form ``<argo-workflow-name>-<pvc_name_suffix>``. Only one
+
+            of ``pvc_name`` and ``pvc_name_suffix`` can be provided.'
+          isOptional: true
+          parameterType: STRING
+        size:
+          description: The size of storage requested by the PVC that will be provisioned.
+            For example, ``'5Gi'``. Corresponds to `PersistentVolumeClaim.spec.resources.requests.storage
+            <https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaimSpec>`_.
+          parameterType: STRING
+        storage_class_name:
+          defaultValue: ''
+          description: 'Name of StorageClass from which to provision the PV
+
+            to back the PVC. ``None`` indicates to use the cluster''s default
+
+            storage_class_name. Set to ``''''`` for a statically specified PVC.'
+          isOptional: true
+          parameterType: STRING
+        volume_name:
+          description: 'Pre-existing PersistentVolume that should back the
+
+            provisioned PersistentVolumeClaim. Used for statically
+
+            specified PV only. Corresponds to `PersistentVolumeClaim.spec.volumeName
+            <https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/persistent-volume-claim-v1/#PersistentVolumeClaimSpec>`_.'
+          isOptional: true
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        name:
+          parameterType: STRING
   comp-get-metrics:
     executorLabel: exec-get-metrics
   comp-predict-prob-on-test-data:
@@ -16,6 +79,9 @@ components:
     executorLabel: exec-train-test-split
 deploymentSpec:
   executors:
+    exec-createpvc:
+      container:
+        image: argostub/createpvc
     exec-get-metrics:
       container:
         args:
@@ -31,7 +97,7 @@ deploymentSpec:
           \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
-          \ 'sklearn' && \"$0\" \"$@\"\n"
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -48,13 +114,14 @@ deploymentSpec:
           \    import numpy as np\n    from sklearn.metrics import accuracy_score\
           \ , precision_score,recall_score,log_loss\n    from sklearn import metrics\n\
           \    y_test = np.load(f'data/y_test.npy',allow_pickle=True)\n    y_pred\
-          \ = np.load(f'data/y_pred.npy',allow_pickle=True)\n    y_pred_proba = np.load(f'data/y_pred_proba.npy',allow_pickle=True)\n\
-          \n    acc_score = accuracy_score(y_test,y_pred)\n\n    pre_score = precision_score(y_test,y_pred)\n\
-          \    recall_score = recall_score(y_test,y_pred)\n    log = log_loss(y_test,y_pred_proba)\n\
-          \    print(\"\\n Model Metrics:\", {'accuracy': round(acc_score, 2), 'precision':\
-          \ round(pre_score, 2), 'recall': round(recall_score, 2), 'entropy': round(log,\
-          \ 2)})\n\n"
-        image: python:3.12
+          \ = np.load(f'data/y_pred.npy',allow_pickle=True)\n    y_pred_prob = np.load(f'data/y_pred_prob.npy',allow_pickle=True)\n\
+          \    acc = accuracy_score(y_test, y_pred)\n    prec = precision_score(y_test,\
+          \ y_pred,average='micro')\n    recall = recall_score(y_test, y_pred,average='micro')\n\
+          \    entropy = log_loss(y_test, y_pred_prob)\n    acc_score = accuracy_score(y_test,y_pred)\n\
+          \    log = log_loss(y_test,y_pred_prob)\n    print(\"\\n Model Metrics:\"\
+          , {'accuracy': round(acc, 2), 'precision': round(prec, 2), 'recall': round(recall,\
+          \ 2), 'entropy': round(entropy, 2)})\n\n"
+        image: python:3.10
     exec-predict-prob-on-test-data:
       container:
         args:
@@ -70,7 +137,7 @@ deploymentSpec:
           \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
-          \ 'sklearn' && \"$0\" \"$@\"\n"
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -83,13 +150,13 @@ deploymentSpec:
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef predict_prob_on_test_data():\n    import pandas as pd\n    import\
-          \ numpy as np\n    import pickle\n    print(\"---- Inside predict_prob_on_test_data\
-          \ component ----\")\n    with open(f'data/model.pkl','rb') as f:\n     \
-          \   logistic_reg_model = pickle.load(f)\n    X_test = np.load(f'data/X_test.npy',allow_pickle=True)\n\
+          \ numpy as np\n    import pickle\n    print(\"Inside predict_prob_on_test_data\
+          \ component\")\n    with open(f'data/model.pkl','rb') as f:\n        logistic_reg_model\
+          \ = pickle.load(f)\n    X_test = np.load(f'data/X_test.npy',allow_pickle=True)\n\
           \    y_pred_prob = logistic_reg_model.predict_proba(X_test)\n    np.save(f'data/y_pred_prob.npy',\
-          \ y_pred_prob)\n\n    print(\"\\n---- Predicted Probabilities ----\")\n\
-          \    print(\"\\n\")\n    print(y_pred_prob)\n\n"
-        image: python:3.12
+          \ y_pred_prob)\n\n    print(\"\\nPredicted Probabilities\")\n    print(\"\
+          \\n\")\n    print(y_pred_prob)\n\n"
+        image: python:3.10
     exec-prepare-data:
       container:
         args:
@@ -117,11 +184,13 @@ deploymentSpec:
 
           '
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
-          \ *\n\ndef prepare_data():\n\n    import pandas as pd\n    print(\"-------Inside\
-          \ data -----------\")\n    df = pd.read_csv(\"\")\n    df = df.dropna()\n\
-          \    df.to_csv(f'data/final_data.csv',index = False)\n    print(\"-----\
-          \ data saved in csv format --------\")\n\n"
-        image: python:3.12
+          \ *\n\ndef prepare_data():\n    import os\n    import pandas as pd\n   \
+          \ # os.mkdir(\"C:/Users/bhavl/Downloads/IRIS/data\")\n    # os.makedirs(\"\
+          data\", exist_ok=True)\n    print(\"Inside data \")\n    df = pd.read_csv(\"\
+          https://raw.githubusercontent.com/TripathiAshutosh/dataset/main/iris.csv\"\
+          )\n    df = df.dropna()\n\n    df.to_csv(f'data/final_data.csv',index =\
+          \ False)\n    print(\"data saved in csv format\")\n\n"
+        image: python:3.10
     exec-test-on-data:
       container:
         args:
@@ -137,7 +206,7 @@ deploymentSpec:
           \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
-          \ 'sklearn' && \"$0\" \"$@\"\n"
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -153,9 +222,8 @@ deploymentSpec:
           \ np\n    import pickle\n    with open(f'data/model.pkl','rb') as f:\n \
           \       l_model = pickle.load(f)\n    X_test = np.load(f'data/X_test.npy',allow_pickle=True)\n\
           \    y_pred = l_model.predict(X_test)\n\n\n    np.save(f'data/y_pred.npy',y_pred)\n\
-          \n    print(\"-------Prediction Completed---------\")\n    print(y_pred)\n\
-          \n"
-        image: python:3.12
+          \n    print(\"Prediction Completed\")\n    print(y_pred)\n\n"
+        image: python:3.10
     exec-train-basic-classifier:
       container:
         args:
@@ -171,7 +239,7 @@ deploymentSpec:
           \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
-          \ 'sklearn' && \"$0\" \"$@\"\n"
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -186,11 +254,11 @@ deploymentSpec:
           \ *\n\ndef train_basic_classifier():\n    import pandas as pd\n    import\
           \ numpy as np\n    from sklearn.linear_model import LogisticRegression\n\
           \    X_train = np.load(f'data/X_train.npy',allow_pickle=True)\n    y_train\
-          \ = np.load(f'data/y_train.npy',allow_pickle=True)\n    classifier = LogiticRegression(max_iter\
+          \ = np.load(f'data/y_train.npy',allow_pickle=True)\n    classifier = LogisticRegression(max_iter\
           \ = 500)\n    classifier.fit(X_train,y_train)\n    import pickle\n    with\
           \ open(f'data/model.pkl','wb') as f:\n        pickle.dump(classifier,f)\n\
-          \    print(\"-----------LOGISTIC REGRESSION TRAINED--------\")\n\n"
-        image: python:3.12
+          \    print(\"LOGISTIC REGRESSION TRAINED\")\n\n"
+        image: python:3.10
     exec-train-test-split:
       container:
         args:
@@ -206,7 +274,7 @@ deploymentSpec:
           \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
           \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
           \  python3 -m pip install --quiet --no-warn-script-location 'pandas' 'numpy'\
-          \ && \"$0\" \"$@\"\n"
+          \ 'scikit-learn' && \"$0\" \"$@\"\n"
         - sh
         - -ec
         - 'program_path=$(mktemp -d)
@@ -220,73 +288,141 @@ deploymentSpec:
         - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
           \ *\n\ndef train_test_split():\n\n    import pandas as pd\n    import numpy\
           \ as np\n    from sklearn.model_selection import train_test_split\n    print(\"\
-          ------seperating data into test train -----\")\n    final_data = pd.read_csv(f'data/final_data.csv')\n\
+          seperating data into test train\")\n    final_data = pd.read_csv(f'data/final_data.csv')\n\
           \    target_column = 'class'\n    X = final_data.loc[:,final_data.columns\
           \ != target_column]\n    y = final_data.loc[:,final_data.columns==target_column]\n\
           \    X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.3,stratify\
           \ = y,random_state = 47)\n    np.save(f'data/X_train.npy',X_train)\n   \
           \ np.save(f'data/X_test.npy',X_test)\n    np.save(f'data/y_train.npy',y_train)\n\
-          \    np.save(f'data/y_test.npy',y_test)\n\n    print(\"--------training\
-          \ data -----------\")\n    print(\"/n\")\n    print(X_train)\n\n    print(\"\
-          --------test data -------\")\n    print(\"/n\")\n    print(X_test)\n\n"
-        image: python:3.12
+          \    np.save(f'data/y_test.npy',y_test)\n\n    print(\"training data\")\n\
+          \    print(\"/n\")\n    print(X_train)\n\n    print(\"test data\")\n   \
+          \ print(\"/n\")\n    print(X_test)\n\n"
+        image: python:3.10
 pipelineInfo:
   description: Pipeline to prepare Iris dataset.
   name: iris-pipeline
 root:
   dag:
     tasks:
-      get-metrics:
+      createpvc:
         cachingOptions:
           enableCache: true
         componentRef:
+          name: comp-createpvc
+        inputs:
+          parameters:
+            access_modes:
+              runtimeValue:
+                constant:
+                - ReadWriteMany
+            pvc_name_suffix:
+              runtimeValue:
+                constant: -my-pvc
+            size:
+              runtimeValue:
+                constant: 1Gi
+            storage_class_name:
+              runtimeValue:
+                constant: standard
+        taskInfo:
+          name: createpvc
+      get-metrics:
+        cachingOptions: {}
+        componentRef:
           name: comp-get-metrics
         dependentTasks:
+        - createpvc
         - predict-prob-on-test-data
         taskInfo:
           name: get-metrics
       predict-prob-on-test-data:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-predict-prob-on-test-data
         dependentTasks:
+        - createpvc
         - test-on-data
         taskInfo:
           name: predict-prob-on-test-data
       prepare-data:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-prepare-data
+        dependentTasks:
+        - createpvc
         taskInfo:
           name: prepare-data
       test-on-data:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-test-on-data
         dependentTasks:
+        - createpvc
         - train-basic-classifier
         taskInfo:
           name: test-on-data
       train-basic-classifier:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-train-basic-classifier
         dependentTasks:
+        - createpvc
         - train-test-split
         taskInfo:
           name: train-basic-classifier
       train-test-split:
-        cachingOptions:
-          enableCache: true
+        cachingOptions: {}
         componentRef:
           name: comp-train-test-split
         dependentTasks:
+        - createpvc
         - prepare-data
         taskInfo:
           name: train-test-split
+  inputDefinitions:
+    parameters:
+      data_path:
+        parameterType: STRING
 schemaVersion: 2.1.0
 sdkVersion: kfp-2.7.0
+---
+platforms:
+  kubernetes:
+    deploymentSpec:
+      executors:
+        exec-get-metrics:
+          pvcMount:
+          - mountPath: /data
+            taskOutputParameter:
+              outputParameterKey: name
+              producerTask: createpvc
+        exec-predict-prob-on-test-data:
+          pvcMount:
+          - mountPath: /data
+            taskOutputParameter:
+              outputParameterKey: name
+              producerTask: createpvc
+        exec-prepare-data:
+          pvcMount:
+          - mountPath: /data
+            taskOutputParameter:
+              outputParameterKey: name
+              producerTask: createpvc
+        exec-test-on-data:
+          pvcMount:
+          - mountPath: /data
+            taskOutputParameter:
+              outputParameterKey: name
+              producerTask: createpvc
+        exec-train-basic-classifier:
+          pvcMount:
+          - mountPath: /data
+            taskOutputParameter:
+              outputParameterKey: name
+              producerTask: createpvc
+        exec-train-test-split:
+          pvcMount:
+          - mountPath: /data
+            taskOutputParameter:
+              outputParameterKey: name
+              producerTask: createpvc

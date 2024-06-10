@@ -17,8 +17,9 @@
 
 
 
-**IRIS PIPELINE** <br>
-![iris_pipeline](https://github.com/Bhavleenk/Kubeflow-Iris-quickstart/assets/107846946/7263c504-0bdb-4c03-bed1-9c36f7dc813d)
+**IRIS PIPELINE** <br> <br>
+![image](https://github.com/Bhavleenk/Kubeflow-Iris-quickstart/assets/107846946/aafe3c90-fa3b-4188-a476-36307cc5c91b)
+
 
 
 

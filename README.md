@@ -3,6 +3,31 @@
 <ul><li>brew install minikube</li>
 <li>brew install docker</li><ul>
 </ul>
+<h2>Installation on Windows</h2>
+## Step 1: Install Docker Desktop
+
+Download and install Docker Desktop from [here](https://docs.docker.com/desktop/install/windows-install/).
+
+## Step 2: Install Minikube
+
+Run the following commands in Command Prompt:
+
+powershell
+New-Item -Path 'c:\' -Name 'minikube' -ItemType Directory -Force
+Invoke-WebRequest -OutFile 'c:\minikube\minikube.exe' -Uri 'https://github.com/kubernetes/minikube/releases/latest/download/minikube-windows-amd64.exe' -UseBasicParsing
+$oldPath = [Environment]::GetEnvironmentVariable('Path', [EnvironmentVariableTarget]::Machine)
+if ($oldPath.Split(';') -inotcontains 'C:\minikube'){
+  [Environment]::SetEnvironmentVariable('Path', $('{0};C:\minikube' -f $oldPath), [EnvironmentVariableTarget]::Machine)
+}
+minikube start
+kubectl get po -A
+
+## Step 3: Local Deployment
+set PIPELINE_VERSION=2.2.0
+kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=$PIPELINE_VERSION"
+kubectl wait --for condition=established --timeout=60s crd/applications.app.k8s.io
+kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic?ref=$PIPELINE_VERSION"
+kubectl port-forward -n kubeflow svc/ml-pipeline-ui 8080:80
 <h2>Basics of Kubeflow</h2>
 <li>2 CPUs or more</li>
    <li>2GB of free memory</li>
